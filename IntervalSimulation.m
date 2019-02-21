@@ -147,6 +147,7 @@ plot(energyTally(10:end),tallyVar(10:end,2));
 if totalMC
     tic;
     numSimulations = 1;
+    numBatch = 1;
     tendl                       = unidrnd( numFe, [numSimulations, 1]);
     current = [0,0];
     particleEnergy = [14.2e6,14.2e6];
@@ -176,12 +177,12 @@ if totalMC
                         [pointParticleEnergy, pointParticlePosition, Alive] = transport( pointParticleEnergy,...
                             pointParticlePosition, total, scat,absp, energy, randNums); 
                     end
-                    [dis, Idx] = min( abs( energyTally' - particleEnergy(1) ));
+                    [dis, Idx] = min( abs( energyTally' - pointParticleEnergy(1) ));
                     d = currentOut(1) - current(1);
 
                     tmcTallySingle(j,Idx) = tmcTallySingle(j,Idx) + d;
                     pointParticleEnergy = pointParticleEnergyOut;
-                    pointParticlePositionOut = pointParticlePosition;
+                    pointParticlePosition = pointParticlePositionOut;
                 end
             end 
         end
