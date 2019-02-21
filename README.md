@@ -5,4 +5,4 @@ IntervalParticleTransport.m for single particle phase space evolution with inter
 
 IntervalSimulation.m for simulation including comparison with monte carlo.
 
-Nuclear data required, but can be found in the juliaMC repository
+Nuclear data required, but can be found in the tendlHDF5 repository
