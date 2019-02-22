@@ -4,12 +4,12 @@
 %%%
 
 withXSUncertainty = 1;
-totalMC = 0;
+totalMC = 1;
 numFe = 613;
 
 if withXSUncertainty
     
-    XSDIR = '/home/angray/Documents/neutronics/juliaNeutronics/tendlHDF5/Fe056';
+    XSDIR = '/Users/akgray/Documents/neutronics/juliaNeutronics/tendlHDF5/Fe056';
 
     dir = strcat(XSDIR,'/Fe056_0000.h5');
     energy = h5read(dir,"/energy");
@@ -66,7 +66,7 @@ if withXSUncertainty
     
 else
 
-    filename = '/home/angray/Documents/neutronics/juliaNeutronics/tendlHDF5/Fe056/Fe056_0000.h5';
+    filename = '/Users/akgray/Documents/neutronics/juliaNeutronics/tendlHDF5/Fe056/Fe056_0000.h5';
 
     energy  = h5read(filename,"/energy");
     total   = h5read(filename, "/total");
@@ -81,20 +81,25 @@ else
 
 end
 
+disp("Nuclear Data read")
+
 %% Interval Monte Carlo
 numBatch        = 10;
-numParticles    = 10000;
+numParticles    = 100000;
 energyTally     = 1e4:5e4:2e7;
 tallymin        = zeros(numel(energyTally),numBatch);
 tallymax        = zeros(numel(energyTally),numBatch);
 
+
 tic;
-for  j =1:numBatch
+parfor  j =1:numBatch
+    localTallyMax = zeros(numel(energyTally),1);
+    localTallyMin = zeros(numel(energyTally),1);
     for i = 1:numParticles
         current = [0,0];
         particleEnergy = [14.2e6,14.2e6];
-        positionUncertainty(1) = 0;
-        current(1,2) = positionUncertainty(1) + current(1,1);  
+        positionUncertainty = 0;
+        current(1,2) = positionUncertainty + current(1,1);  
         Alive = 1;
         while Alive == 1
             randNums = rand(3,1);
@@ -107,13 +112,15 @@ for  j =1:numBatch
 
             Indexes = Idx(1):Idx(2);
 
-            tallymin(Indexes,j) = tallymin(Indexes,j) + dmin;
-            tallymax(Indexes,j) = tallymax(Indexes,j) + dmax;
+            localTallyMin(Indexes) = localTallyMin(Indexes) + dmin;
+            localTallyMax(Indexes) = localTallyMax(Indexes) + dmax;
 
             particleEnergy = particleEnergyOut;
             current = currentOut;
         end
     end
+    tallymin(:,j) = localTallyMin;
+    tallymax(:,j) = localTallyMax;
 end
 toc
 
@@ -142,27 +149,36 @@ plot(energyTally(10:end),tallyVar(10:end,1));
 hold on
 plot(energyTally(10:end),tallyVar(10:end,2));
 
+disp("Interval MC finished")
+
 %% Total Monte Carlo
 
 if totalMC
     tic;
-    numSimulations = 1;
-    numBatch = 1;
+    numSimulations = 15;
+    numBatch = 10;
     tendl                       = unidrnd( numFe, [numSimulations, 1]);
     current = [0,0];
     particleEnergy = [14.2e6,14.2e6];
     positionUncertainty(1) = 0;
     current(1,2) = positionUncertainty(1) + current(1,1);
     tmcTallyMean = zeros(numel(energyTally),numSimulations);
-    tmcTAllyVar = zeros(numel(energyTally),numSimulations);
+    tmcTallyVar = zeros(numel(energyTally),numSimulations);
     
     for k = 1:numSimulations
         disp("Starting simulation:")
         k
         tmcTallySingle = zeros(numBatch,numel(energyTally));
-        for j = 1: numBatch
+        parfor j = 1: numBatch
+            
+             totes = repmat(totalFe(tendl(k), :)',[1,2]); 
+             scats = repmat(scatFe(tendl(k), :)',[1,2]);
+             abps  = repmat(abspFe(tendl(k), :)',[1,2]);
+            
+            
             disp("Starting batch:")
             j
+            tmcTallyBatch = zeros(numel(energyTally),1);
             for i = 1:numParticles
                 Alive = 1; 
                 pointParticleEnergy         = particleEnergy; %repmat((particleEnergy(1,1) + (particleEnergy(1,2) - particleEnergy(1,1)) .* rand(1,1))', [1,2]);
@@ -171,20 +187,21 @@ if totalMC
                     randNums = rand(3,1);
                     if withXSUncertainty
                         [pointParticleEnergyOut, pointParticlePositionOut, Alive] = transport( pointParticleEnergy, pointParticlePosition, ...
-                            repmat(totalFe(tendl(k), :)',[1,2]), repmat(scatFe(tendl(k), :)',[1,2]),...
-                            repmat(abspFe(tendl(k), :)',[1,2]), energy, randNums); 
+                            totes, scats,...
+                            abps, energy, randNums); 
                     else
-                        [pointParticleEnergy, pointParticlePosition, Alive] = transport( pointParticleEnergy,...
+                        [pointParticleEnergyOut, pointParticlePositionOut, Alive] = transport( pointParticleEnergy,...
                             pointParticlePosition, total, scat,absp, energy, randNums); 
                     end
-                    [dis, Idx] = min( abs( energyTally' - pointParticleEnergy(1) ));
-                    d = currentOut(1) - current(1);
+                    [~, Idx] = min( abs( energyTally' - pointParticleEnergy(1) ));
+                    d = pointParticlePositionOut(1) - pointParticlePosition(1);
 
-                    tmcTallySingle(j,Idx) = tmcTallySingle(j,Idx) + d;
+                    tmcTallyBatch(Idx) = tmcTallyBatch(Idx) + d;
                     pointParticleEnergy = pointParticleEnergyOut;
                     pointParticlePosition = pointParticlePositionOut;
                 end
             end 
+            tmcTallySingle(j,:) = tmcTallyBatch(:);
         end
         for l = 1:numel(energyTally)
             tmcTallyMean(l,k) = mean(tmcTallySingle(:,l));
@@ -194,8 +211,61 @@ if totalMC
     toc
 end
 
+%% Plotting
 
+energyLocals = [0.5,1,5,10,14.2].*1e6;
+[~, Idx] = min( abs( energyTally' - energyLocals ));
+
+figure;
+loglog(energyTally(10:end),tallyMean(10:end,1)-1.96*sqrt(tallyVar(10:end,2)),'LineWidth',2);
+hold on
+loglog(energyTally(10:end),tallyMean(10:end,2)+1.96*sqrt(tallyVar(10:end,2)),'LineWidth',2);
+
+for k = 1:numSimulations
+    loglog(energyTally(10:end),tmcTallyMean(10:end,k),'r-');
+end
+
+y = ylim;
+
+for i =1:numel(energyLocals)
+   plot([energyLocals(i),energyLocals(i)],[y(1),y(2)]) 
+end
+
+for i = 1:numel(energyLocals)
     
+    figure;
+    
+    range = tallyMean(Idx(i),1)-4*sqrt(tallyVar(Idx(i),2)):0.01:tallyMean(Idx(i),2)+4*sqrt(tallyVar(Idx(i),2));
+
+    cdfupper = zeros(numel(range),1);
+    cdflower = zeros(numel(range),1);
+
+    for j=1:numel(range)
+        upperVal1 = normcdf(range(j),tallyMean(Idx(i),1),sqrt(tallyVar(Idx(i),1)));
+        upperVal2 = normcdf(range(j),tallyMean(Idx(i),1),sqrt(tallyVar(Idx(i),2)));
+        cdfupper(j) = max(upperVal1,upperVal2);
+
+        lowerVal1 = normcdf(range(j),tallyMean(Idx(i),2),sqrt(tallyVar(Idx(i),1)));
+        lowerVal2 = normcdf(range(j),tallyMean(Idx(i),2),sqrt(tallyVar(Idx(i),2)));
+        cdflower(j) = min(lowerVal1,lowerVal2);
+    end
+    plot(range,cdflower,'LineWidth',2);
+    hold on;
+    plot(range,cdfupper,'LineWidth',2);
+    
+    for k = 1:numSimulations
+        plot(range, normcdf(range,tmcTallyMean(Idx(i),k),sqrt(tmcTallyVar(Idx(i),k))), 'r-' );
+    end
+    ecdf(tmcTallyMean(Idx(i),:))
+    
+    oo=['Distributions at: ',num2str(energyLocals(i))];
+    clear title;
+    title(oo);
+    
+end
+
+
+
 
 
 function [particleEnergyOut, particlePositionOut, alive] = transport(particleEnergyIn, particlePositionIn, total, scat, absp, energy, randSeq)
