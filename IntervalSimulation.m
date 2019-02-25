@@ -211,15 +211,17 @@ if totalMC
     toc
 end
 
+save('AnderGrandPlan')
+
 %% Plotting
 
 energyLocals = [0.5,1,5,10,14.2].*1e6;
 [~, Idx] = min( abs( energyTally' - energyLocals ));
 
 figure;
-loglog(energyTally(10:end),tallyMean(10:end,1)-1.96*sqrt(tallyVar(10:end,2)),'LineWidth',2);
+loglog(energyTally(10:end),tallyMean(10:end,1),'LineWidth',2);
 hold on
-loglog(energyTally(10:end),tallyMean(10:end,2)+1.96*sqrt(tallyVar(10:end,2)),'LineWidth',2);
+loglog(energyTally(10:end),tallyMean(10:end,2),'LineWidth',2);
 
 for k = 1:numSimulations
     loglog(energyTally(10:end),tmcTallyMean(10:end,k),'r-');
